@@ -17,8 +17,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -48,8 +48,8 @@ jobs:
     name: Android APK
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -65,8 +65,8 @@ jobs:
     name: iOS app (simulator)
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 17
@@ -79,6 +79,8 @@ jobs:
       - name: Build for simulator
         working-directory: iosApp
         run: |
+          xcodebuild -list -project iosApp.xcodeproj
+          set +e
           xcodebuild \
             -project iosApp.xcodeproj \
             -scheme iosApp \
@@ -87,7 +89,15 @@ jobs:
             -arch arm64 \
             -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO \
-            build
+            build 2>&1 | tee xcodebuild.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            # Surface errors as annotations so they are visible without downloading logs.
+            grep -E "error:|^e: |FAILURE|What went wrong" xcodebuild.log | head -40 | while IFS= read -r line; do
+              echo "::error::${line}"
+            done
+          fi
+          exit $status
       - uses: actions/upload-artifact@v4
         with:
           name: tides-ios-simulator

@@ -11,6 +11,7 @@ targets:
   iosApp:
     type: application
     platform: iOS
+    scheme: {}
     sources:
       - path: iosApp
         excludes:
