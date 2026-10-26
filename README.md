@@ -24,6 +24,7 @@ Developed by **XRMX Software Solutions**.
 - [Building the app](#building-the-app)
 - [Project structure](#project-structure)
 - [Screenshots](#screenshots)
+- [Changelog](CHANGELOG.md)
 
 ## Features
 

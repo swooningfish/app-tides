@@ -7,7 +7,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Fixed
-- iOS CI build: XcodeGen now generates a shared `iosApp` scheme for `xcodebuild`, and build errors are surfaced as workflow annotations.
+- iOS CI build: XcodeGen now generates a shared `iosApp` scheme with an Xcode 14-compatible project format, the job runs on `macos-15`, and build errors are surfaced as workflow annotations.
+
+### Added
+- This changelog, linked from the README.
 
 ### Changed
 - CI uses `actions/checkout@v5` and `actions/setup-java@v5`.

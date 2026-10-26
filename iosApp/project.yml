@@ -3,6 +3,7 @@
 name: iosApp
 options:
   bundleIdPrefix: com.xrmx
+  projectFormat: xcode14_0
   deploymentTarget:
     iOS: "15.0"
 attributes:
