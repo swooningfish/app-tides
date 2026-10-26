@@ -94,7 +94,7 @@ jobs:
           status=${PIPESTATUS[0]}
           if [ "$status" -ne 0 ]; then
             # Surface errors as annotations so they are visible without downloading logs.
-            { grep -E "error:|^e: |FAILURE|What went wrong" xcodebuild.log | head -4; tail -6 xcodebuild.log; } | while IFS= read -r line; do
+            { grep -E "\.kt:[0-9]+:[0-9]+: error:|\.swift:[0-9]+:[0-9]+: error:" xcodebuild.log | sort -u | head -9; grep -m1 "What went wrong" xcodebuild.log; } | while IFS= read -r line; do
               echo "::error::${line}"
             done
           fi

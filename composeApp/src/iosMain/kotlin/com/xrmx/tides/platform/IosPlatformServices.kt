@@ -27,6 +27,7 @@ import platform.UIKit.UIApplication
 import platform.UIKit.UIImage
 import platform.UIKit.UIImageWriteToSavedPhotosAlbum
 import platform.UIKit.UIViewController
+import platform.UIKit.popoverPresentationController
 import platform.UserNotifications.UNAuthorizationOptionAlert
 import platform.UserNotifications.UNAuthorizationOptionSound
 import platform.UserNotifications.UNMutableNotificationContent
@@ -37,6 +38,7 @@ import platform.UserNotifications.UNUserNotificationCenter
 import platform.darwin.NSObject
 import kotlin.coroutines.resume
 
+@OptIn(ExperimentalForeignApi::class)
 class IosPlatformServices : PlatformServices {
 
     override suspend fun currentLocation(): LatLon? = withTimeoutOrNull(20_000) {
