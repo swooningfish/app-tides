@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Moon -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M68,30 A9,9 0 1,1 68,48 A7,7 0 1,0 68,30 Z" />
+    <!-- Waves -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,56 Q36,50 42,56 T54,56 T66,56 T78,56" />
+    <path
+        android:strokeColor="#C7E7FF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,67 Q36,61 42,67 T54,67 T66,67 T78,67" />
+    <path
+        android:strokeColor="#84CFFF"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M30,78 Q36,72 42,78 T54,78 T66,78 T78,78" />
+</vector>

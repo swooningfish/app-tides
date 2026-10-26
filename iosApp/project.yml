@@ -1,0 +1,52 @@
+# XcodeGen spec for the iOS app. Generate the Xcode project with:
+#   brew install xcodegen && cd iosApp && xcodegen generate
+name: iosApp
+options:
+  bundleIdPrefix: com.xrmx
+  deploymentTarget:
+    iOS: "15.0"
+attributes:
+  ORGANIZATIONNAME: XRMX Software Solutions
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - path: iosApp
+        excludes:
+          - Info.plist
+    info:
+      path: iosApp/Info.plist
+      properties:
+        CFBundleDisplayName: Tides
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSHumanReadableCopyright: "© 2026 XRMX Software Solutions"
+        NSLocationWhenInUseUsageDescription: Tides uses your location to find the nearest tide station.
+        NSPhotoLibraryAddUsageDescription: Tides saves tide chart images to your photo library when you ask it to.
+        CADisableMinimumFrameDurationOnPhone: true
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_NAME: Tides
+        PRODUCT_BUNDLE_IDENTIFIER: com.xrmx.tides
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+        FRAMEWORK_SEARCH_PATHS: "$(inherited) $(SRCROOT)/../composeApp/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS: "$(inherited) -framework ComposeApp"
+    preBuildScripts:
+      - name: Compile Kotlin Framework
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "YES" = "$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED" ]; then
+            echo "Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \"YES\""
+            exit 0
+          fi
+          cd "$SRCROOT/.."
+          ./gradlew :composeApp:embedAndSignAppleFrameworkForXcode
