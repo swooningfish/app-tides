@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Fixed
+- iOS: Kotlin/Native compile errors in the share sheet (iPad popover anchor) and save-to-Photos code.
 - iOS CI build: XcodeGen now generates a shared `iosApp` scheme with an Xcode 14-compatible project format, the job runs on `macos-15`, and build errors are surfaced as workflow annotations.
 
 ### Added
