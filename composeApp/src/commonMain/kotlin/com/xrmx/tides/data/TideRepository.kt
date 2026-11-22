@@ -5,6 +5,7 @@ import com.xrmx.tides.data.sources.NoaaSource
 import com.xrmx.tides.data.sources.UkhoSource
 import com.xrmx.tides.data.sources.WorldTidesSource
 import com.xrmx.tides.engine.HarmonicFitter
+import com.xrmx.tides.engine.TidePredictor
 import com.xrmx.tides.model.AppSettings
 import com.xrmx.tides.model.HarmonicModel
 import com.xrmx.tides.model.SourceType
@@ -49,7 +50,7 @@ class TideRepository(private val storage: Storage) {
     }
 
     suspend fun model(station: Station, settings: AppSettings, force: Boolean): ModelResult {
-        val cached = storage.model(station.id)
+        val cached = storage.model(station.id)?.let { withLowestLevel(it, station) }
         if (!force && cached != null && !isStale(cached, station.source)) return ModelResult(cached, null)
         return try {
             val fresh = sync(station, settings)
@@ -82,7 +83,7 @@ class TideRepository(private val storage: Storage) {
             SourceType.EA -> {
                 val samples = ea.readings(station.ref)
                 val fit = withContext(Dispatchers.Default) { HarmonicFitter.fit(samples) }
-                HarmonicModel(
+                val model = HarmonicModel(
                     stationId = station.id,
                     z0 = fit.z0,
                     constituents = fit.constituents,
@@ -91,6 +92,7 @@ class TideRepository(private val storage: Storage) {
                     rmsError = fit.rms,
                     syncedAtEpochSeconds = now,
                 )
+                withLowestLevel(model, station)
             }
 
             SourceType.UKHO -> {
@@ -128,6 +130,19 @@ class TideRepository(private val storage: Storage) {
                 )
             }
         }
+    }
+
+    /**
+     * Environment Agency heights are above Ordnance Datum Newlyn, not Chart Datum. Works out the
+     * lowest predicted tide over a year so heights can be shown above an estimated Chart Datum.
+     * Older cached models get it on first load and are saved again.
+     */
+    private suspend fun withLowestLevel(model: HarmonicModel, station: Station): HarmonicModel {
+        if (station.source != SourceType.EA || model.lowestLevel != null) return model
+        val lowest = withContext(Dispatchers.Default) {
+            TidePredictor(model).lowestLevel(Clock.System.now().epochSeconds)
+        }
+        return model.copy(lowestLevel = lowest).also { if (storage.model(station.id) != null) storage.saveModel(it) }
     }
 
     private fun inferredNote(fit: HarmonicFitter.Result): String =

@@ -55,6 +55,12 @@ data class HarmonicModel(
     val rmsError: Double? = null,
     val syncedAtEpochSeconds: Long,
     val referenceEvents: List<TideEvent> = emptyList(),
+    /**
+     * Lowest predicted level over a year, in metres above [datum]. Set for sources whose datum
+     * is not Chart Datum (Environment Agency gauges use Ordnance Datum Newlyn), so heights can be
+     * shown above an estimated Chart Datum instead.
+     */
+    val lowestLevel: Double? = null,
 )
 
 @Serializable
@@ -68,6 +74,13 @@ enum class Region(val label: String) {
 }
 
 @Serializable
+enum class ThemeMode(val label: String) {
+    SYSTEM("System"),
+    LIGHT("Light"),
+    DARK("Dark"),
+}
+
+@Serializable
 data class AppSettings(
     val units: Units = Units.METRES,
     val region: Region = Region.UK_IRELAND,
@@ -77,6 +90,9 @@ data class AppSettings(
     val alertHigh: Boolean = true,
     val alertLow: Boolean = false,
     val alertLeadMinutes: Int = 60,
+    val theme: ThemeMode = ThemeMode.SYSTEM,
+    /** Show Environment Agency heights above an estimated Chart Datum rather than Ordnance Datum Newlyn. */
+    val estimatedChartDatum: Boolean = true,
 )
 
 data class LatLon(val latitude: Double, val longitude: Double)

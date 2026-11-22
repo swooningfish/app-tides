@@ -46,6 +46,8 @@ kotlin {
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
+            implementation(libs.multiplatform.settings.test)
+            implementation(libs.kotlinx.coroutines.test)
         }
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
@@ -72,8 +74,21 @@ android {
         applicationId = "com.xrmx.tides"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // CI passes the run number and tag so every published APK can be installed over the last one.
+        versionCode = providers.environmentVariable("TIDES_VERSION_CODE").orNull?.toIntOrNull() ?: 1
+        versionName = providers.environmentVariable("TIDES_VERSION_NAME").orNull ?: "1.0.0"
+    }
+    signingConfigs {
+        // A stable release key from CI secrets. Without it, release builds fall back to the debug key (local builds only).
+        val keystore = providers.environmentVariable("TIDES_KEYSTORE_FILE").orNull
+        if (keystore != null) {
+            create("release") {
+                storeFile = file(keystore)
+                storePassword = providers.environmentVariable("TIDES_KEYSTORE_PASSWORD").get()
+                keyAlias = providers.environmentVariable("TIDES_KEY_ALIAS").get()
+                keyPassword = providers.environmentVariable("TIDES_KEY_PASSWORD").get()
+            }
+        }
     }
     packaging {
         resources {
@@ -82,7 +97,10 @@ android {
     }
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
         }
     }
     compileOptions {

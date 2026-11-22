@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Tides</string>
+    <string name="widget_description">Tide now and the next high and low water at your station</string>
+    <string name="widget_disclaimer">Predicted. Use as a guide only.</string>
 </resources>

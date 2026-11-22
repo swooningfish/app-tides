@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+: keep API keys and scheduled alarms out of cloud backups and device transfers. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="tides_secrets.xml" />
+        <exclude domain="sharedpref" path="tide_alerts.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="tides_secrets.xml" />
+        <exclude domain="sharedpref" path="tide_alerts.xml" />
+    </device-transfer>
+</data-extraction-rules>

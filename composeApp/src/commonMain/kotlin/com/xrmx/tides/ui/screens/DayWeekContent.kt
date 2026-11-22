@@ -22,6 +22,7 @@ import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material.icons.outlined.WbTwilight
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,6 +36,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xrmx.tides.engine.DayData
+import com.xrmx.tides.engine.ESTIMATED_CHART_DATUM
+import com.xrmx.tides.engine.WeekData
+import com.xrmx.tides.model.SourceType
 import com.xrmx.tides.engine.TideCalculations
 import com.xrmx.tides.engine.TidePredictor
 import com.xrmx.tides.model.HarmonicModel
@@ -49,6 +53,7 @@ import com.xrmx.tides.ui.components.MoonPhaseIcon
 import com.xrmx.tides.ui.components.SectionCard
 import com.xrmx.tides.ui.components.TideChart
 import com.xrmx.tides.ui.components.formatDateTime
+import com.xrmx.tides.ui.components.rememberComputed
 import com.xrmx.tides.ui.components.formatDecimal
 import com.xrmx.tides.ui.components.formatDuration
 import com.xrmx.tides.ui.components.formatHeight
@@ -58,6 +63,7 @@ import com.xrmx.tides.ui.components.toDisplayUnits
 import com.xrmx.tides.ui.components.unitSuffix
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.math.roundToInt
 
 @Composable
@@ -71,9 +77,9 @@ internal fun DayContent(
 ) {
     val station = state.station ?: return
     val units = state.settings.units
-    val day = remember(predictor, station, state.selectedDate, timeZone) {
+    val day = rememberComputed(predictor, station, state.selectedDate, timeZone) {
         TideCalculations.day(model, predictor, station, state.selectedDate, timeZone)
-    }
+    } ?: return
     val isToday = now.epochSeconds in day.startEpoch until day.endEpoch
 
     if (isToday) {
@@ -95,6 +101,7 @@ internal fun DayContent(
                 axis = AxisMode.HOURS,
                 labelEvents = true,
             ),
+            dayChartDescription(day, timeZone, units),
             Modifier.fillMaxWidth().height(280.dp).padding(start = 8.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
         )
     }
@@ -219,6 +226,24 @@ private fun StationInfoCard(state: UiState, model: HarmonicModel, timeZone: Time
         InfoLine("Method", model.method)
         model.rmsError?.let { InfoLine("Fit error", "± ${formatDecimal(toDisplayUnits(it, state.settings.units), 2)} ${unitSuffix(state.settings.units)} (RMS)") }
         InfoLine("Last synced", formatDateTime(model.syncedAtEpochSeconds, timeZone))
+        val estimated = model.datum == ESTIMATED_CHART_DATUM
+        if (station.source == SourceType.EA && (estimated || model.datum.contains("Ordnance"))) {
+            Text(
+                if (estimated) {
+                    "Environment Agency gauges measure against Ordnance Datum Newlyn. Heights here are shifted so zero is " +
+                        "the lowest predicted tide, close to the Chart Datum used in tide tables, but they can differ from " +
+                        "official tables by 10 to 30 cm."
+                } else {
+                    "Heights are above Ordnance Datum Newlyn (roughly mean sea level), so low water is often below zero " +
+                        "and won't match tide tables, which use Chart Datum."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { actions.updateSettings { it.copy(estimatedChartDatum = !estimated) } }) {
+                Text(if (estimated) "Show heights above Ordnance Datum" else "Show heights above estimated Chart Datum")
+            }
+        }
         TextButton(onClick = actions::resync, enabled = !state.loadingModel) {
             Icon(Icons.Outlined.Sync, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
@@ -247,9 +272,10 @@ internal fun WeekContent(
 ) {
     val station = state.station ?: return
     val units = state.settings.units
-    val week = remember(predictor, station, state.selectedDate, timeZone) {
+    val week = rememberComputed(predictor, station, state.selectedDate, timeZone) {
         TideCalculations.week(model, predictor, station, state.selectedDate, timeZone)
-    }
+    } ?: return
+    val today = now.toLocalDateTime(timeZone).date
     Card(Modifier.fillMaxWidth()) {
         TideChart(
             ChartSpec(
@@ -264,14 +290,39 @@ internal fun WeekContent(
                 axis = AxisMode.DAYS,
                 labelEvents = false,
             ),
+            weekChartDescription(week, units),
             Modifier.fillMaxWidth().height(220.dp).padding(start = 8.dp, end = 12.dp, top = 12.dp, bottom = 8.dp),
         )
     }
     for (day in week.days) {
-        Card(Modifier.fillMaxWidth().clickable { actions.openDay(day.date) }) {
+        val isToday = day.date == today
+        Card(
+            Modifier.fillMaxWidth().clickable { actions.openDay(day.date) },
+            colors = if (isToday) {
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            } else {
+                CardDefaults.cardColors()
+            },
+        ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(formatShortDate(day.date), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                    Text(
+                        if (isToday) "Today, ${formatShortDate(day.date)}" else formatShortDate(day.date),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f),
+                    )
+                    tidalRange(day)?.let { range ->
+                        Text(
+                            "Range ${formatHeight(range, units)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                    }
                     Text(day.moon.phaseName, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.width(8.dp))
                     MoonPhaseIcon(day.moon, size = 18.dp)
@@ -296,5 +347,34 @@ internal fun WeekContent(
                 }
             }
         }
+    }
+}
+
+/** Highest high minus lowest low on the day, or null without both. */
+private fun tidalRange(day: DayData): Double? {
+    val high = day.events.filter { it.type == TideType.HIGH }.maxOfOrNull { it.height } ?: return null
+    val low = day.events.filter { it.type == TideType.LOW }.minOfOrNull { it.height } ?: return null
+    return high - low
+}
+
+private fun eventPhrase(e: TideEvent, timeZone: TimeZone, units: Units): String =
+    "${if (e.type == TideType.HIGH) "High" else "Low"} water ${formatTime(e.epochSeconds, timeZone)}, ${formatHeight(e.height, units)}"
+
+internal fun dayChartDescription(day: DayData, timeZone: TimeZone, units: Units): String =
+    if (day.events.isEmpty()) {
+        "Tide chart for ${formatShortDate(day.date)}. No high or low water."
+    } else {
+        "Tide chart for ${formatShortDate(day.date)}. " + day.events.joinToString(". ") { eventPhrase(it, timeZone, units) } + "."
+    }
+
+internal fun weekChartDescription(week: WeekData, units: Units): String {
+    val events = week.days.flatMap { it.events }
+    val highest = events.filter { it.type == TideType.HIGH }.maxOfOrNull { it.height }
+    val lowest = events.filter { it.type == TideType.LOW }.minOfOrNull { it.height }
+    return buildString {
+        append("Tide chart for 7 days from ${formatShortDate(week.days.first().date)}.")
+        if (highest != null) append(" Highest tide ${formatHeight(highest, units)}.")
+        if (lowest != null) append(" Lowest tide ${formatHeight(lowest, units)}.")
+        append(" Day by day times are listed below.")
     }
 }

@@ -14,7 +14,11 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import com.xrmx.tides.MainActivity
 import com.xrmx.tides.R
+import com.xrmx.tides.data.Storage
 import com.xrmx.tides.model.TideAlert
+import com.xrmx.tides.widget.TideWidgetProvider
+import kotlinx.datetime.Clock
+import kotlinx.datetime.TimeZone
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
@@ -23,10 +27,13 @@ object AlertScheduler {
     private const val PREFS = "tide_alerts"
     private const val KEY_ALERTS = "alerts"
     private const val KEY_COUNT = "count"
-    private const val MAX_ALERTS = 40
+    const val MAX_ALERTS = 40
+    const val HORIZON_DAYS = 7
     internal const val EXTRA_ID = "id"
     internal const val EXTRA_TITLE = "title"
     internal const val EXTRA_BODY = "body"
+    internal const val ACTION_REFRESH = "com.xrmx.tides.action.REFRESH_ALERTS"
+    private const val REFRESH_REQUEST_CODE = 9000
 
     private val serializer = ListSerializer(TideAlert.serializer())
 
@@ -61,7 +68,38 @@ object AlertScheduler {
         prefs(context).edit().remove(KEY_ALERTS).putInt(KEY_COUNT, 0).apply()
     }
 
-    fun restore(context: Context) {
+    /**
+     * Recomputes alerts from the saved station and model, without opening the app. Alerts are only
+     * scheduled a week ahead, so this runs daily, after a reboot, after an app update (which
+     * clears alarms) and when the time zone changes. Falls back to the stored list if there's no model.
+     */
+    fun refresh(context: Context) {
+        val planned = runCatching {
+            AlertPlanner.planFromStorage(
+                Storage(), Clock.System.now().epochSeconds, TimeZone.currentSystemDefault(), HORIZON_DAYS, MAX_ALERTS,
+            )
+        }.getOrNull()
+        when {
+            planned != null -> schedule(context, planned)
+            Storage().appSettings().alertsEnabled -> restore(context)
+            else -> cancel(context)
+        }
+        TideWidgetProvider.updateAll(context)
+    }
+
+    /** A once-a-day, inexact wake-up that calls [refresh]. Re-registering is harmless. */
+    fun ensureDailyRefresh(context: Context) {
+        val alarms = context.getSystemService(AlarmManager::class.java)
+        val intent = Intent(context, AlertRefreshReceiver::class.java).setAction(ACTION_REFRESH)
+        val pending = PendingIntent.getBroadcast(
+            context, REFRESH_REQUEST_CODE, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+        alarms.setInexactRepeating(
+            AlarmManager.RTC, System.currentTimeMillis() + AlarmManager.INTERVAL_HALF_DAY, AlarmManager.INTERVAL_DAY, pending,
+        )
+    }
+
+    private fun restore(context: Context) {
         val stored = prefs(context).getString(KEY_ALERTS, null) ?: return
         val alerts = runCatching { Json.decodeFromString(serializer, stored) }.getOrNull() ?: return
         schedule(context, alerts)
@@ -110,8 +148,26 @@ class TideAlertReceiver : BroadcastReceiver() {
     }
 }
 
-class BootReceiver : BroadcastReceiver() {
+/** Reschedules alerts after a reboot, an app update, a clock or time zone change, and once a day. */
+class AlertRefreshReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == Intent.ACTION_BOOT_COMPLETED) AlertScheduler.restore(context)
+        when (intent.action) {
+            Intent.ACTION_BOOT_COMPLETED,
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_TIMEZONE_CHANGED,
+            Intent.ACTION_TIME_CHANGED,
+            AlertScheduler.ACTION_REFRESH,
+            -> Unit
+            else -> return
+        }
+        val pending = goAsync()
+        Thread {
+            try {
+                AlertScheduler.ensureDailyRefresh(context)
+                AlertScheduler.refresh(context)
+            } finally {
+                pending.finish()
+            }
+        }.start()
     }
 }

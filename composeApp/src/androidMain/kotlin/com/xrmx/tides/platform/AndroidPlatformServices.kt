@@ -21,6 +21,7 @@ import androidx.core.content.FileProvider
 import com.xrmx.tides.alerts.AlertScheduler
 import com.xrmx.tides.model.LatLon
 import com.xrmx.tides.model.TideAlert
+import com.xrmx.tides.widget.TideWidgetProvider
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -144,6 +145,14 @@ class AndroidPlatformServices(
     }
 
     override fun cancelAlerts() = AlertScheduler.cancel(activity.applicationContext)
+
+    override val alertHorizonDays: Int get() = AlertScheduler.HORIZON_DAYS
+    override val maxAlerts: Int get() = AlertScheduler.MAX_ALERTS
+
+    override fun onTideDataChanged() {
+        val context = activity.applicationContext
+        Thread { runCatching { TideWidgetProvider.updateAll(context) } }.start()
+    }
 
     private fun Location.toLatLon() = LatLon(latitude, longitude)
 }

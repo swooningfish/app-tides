@@ -3,8 +3,8 @@ package com.xrmx.tides.ui
 import androidx.compose.ui.text.font.FontFamily
 import com.xrmx.tides.data.Storage
 import com.xrmx.tides.data.TideRepository
-import com.xrmx.tides.engine.TideCalculations
-import com.xrmx.tides.engine.TidePredictor
+import com.xrmx.tides.alerts.AlertPlanner
+import com.xrmx.tides.engine.forDisplay
 import com.xrmx.tides.export.ExportRenderer
 import com.xrmx.tides.model.AppSettings
 import com.xrmx.tides.model.HarmonicModel
@@ -12,13 +12,8 @@ import com.xrmx.tides.model.LatLon
 import com.xrmx.tides.model.Region
 import com.xrmx.tides.model.SourceType
 import com.xrmx.tides.model.Station
-import com.xrmx.tides.model.TideAlert
-import com.xrmx.tides.model.TideType
 import com.xrmx.tides.platform.PlatformServices
 import com.xrmx.tides.platform.encodePng
-import com.xrmx.tides.ui.components.formatHeight
-import com.xrmx.tides.ui.components.formatShortDate
-import com.xrmx.tides.ui.components.formatTime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -76,6 +71,7 @@ interface TidesActions {
     fun shiftDate(days: Int) {}
     fun goToToday() {}
     fun openDay(date: LocalDate) {}
+    fun goToDate(date: LocalDate) {}
     fun selectStation(station: Station) {}
     fun toggleFavourite(station: Station) {}
     fun resync() {}
@@ -97,6 +93,14 @@ class TidesViewModel(
     private val repository = TideRepository(storage)
     private var modelJob: Job? = null
     private var catalogJob: Job? = null
+    private var alertsJob: Job? = null
+
+    /** The model as synced, before display adjustments such as the estimated Chart Datum. */
+    private var rawModel: HarmonicModel? = null
+
+    /** The calendar day the app last saw, to notice midnight. */
+    private var lastToday: LocalDate = Clock.System.todayIn(timeZone)
+    private var alertsPlannedAtSec: Long = 0
 
     /** Set by the UI; text layout for PNG export needs the platform font resolver. */
     var fontResolver: FontFamily.Resolver? = null
@@ -138,10 +142,27 @@ class TidesViewModel(
 
     override fun openDay(date: LocalDate) = _state.update { it.copy(selectedDate = date, mode = ViewMode.DAY) }
 
+    override fun goToDate(date: LocalDate) = _state.update { it.copy(selectedDate = date) }
+
     override fun selectStation(station: Station) {
         storage.saveSelectedStation(station)
+        rawModel = null
         _state.update { it.copy(station = station, model = null, modelError = null, modelWarning = null, screen = Screen.HOME) }
         loadModel(station, force = false)
+    }
+
+    /**
+     * Called by the UI every 30 seconds and when the app returns to the foreground.
+     * Moves "today" on at midnight (if the user was looking at today) and keeps alerts topped up.
+     */
+    fun onTick(now: Instant) {
+        val today = now.toLocalDateTime(timeZone).date
+        if (today != lastToday) {
+            val previous = lastToday
+            lastToday = today
+            _state.update { if (it.selectedDate == previous) it.copy(selectedDate = today) else it }
+        }
+        if (now.epochSeconds - alertsPlannedAtSec > ALERT_REFRESH_SECONDS) rescheduleAlerts()
     }
 
     override fun toggleFavourite(station: Station) {
@@ -201,10 +222,20 @@ class TidesViewModel(
         val alertsChanged = before.alertsEnabled != after.alertsEnabled || before.alertHigh != after.alertHigh ||
             before.alertLow != after.alertLow || before.alertLeadMinutes != after.alertLeadMinutes ||
             before.units != after.units
-        if (alertsChanged) rescheduleAlerts()
+        val displayChanged = before.estimatedChartDatum != after.estimatedChartDatum || before.units != after.units
+        if (before.estimatedChartDatum != after.estimatedChartDatum) {
+            _state.update { it.copy(model = rawModel?.forDisplay(after)) }
+        }
+        if (alertsChanged || displayChanged) rescheduleAlerts()
+        if (displayChanged) services.onTideDataChanged()
         if (before.region != after.region || before.ukhoKey != after.ukhoKey) {
             if (_state.value.screen == Screen.STATIONS) loadCatalog(force = false) else _state.update { it.copy(catalog = emptyList()) }
         }
+        // A station that failed for want of a key can load now the key is there.
+        val keyAdded = (before.ukhoKey != after.ukhoKey && after.ukhoKey.isNotBlank()) ||
+            (before.worldTidesKey != after.worldTidesKey && after.worldTidesKey.isNotBlank())
+        val s = _state.value
+        if (keyAdded && s.station != null && s.model == null && !s.loadingModel) loadModel(s.station, force = false)
     }
 
     override fun consumeMessage() = _state.update { it.copy(message = null) }
@@ -247,15 +278,17 @@ class TidesViewModel(
             try {
                 val result = repository.model(station, _state.value.settings, force)
                 if (_state.value.station?.id != station.id) return@launch
+                rawModel = result.model
                 _state.update {
                     it.copy(
-                        model = result.model,
+                        model = result.model.forDisplay(it.settings),
                         loadingModel = false,
                         modelWarning = result.warning,
                         message = if (force && result.warning == null) "Synced with ${station.source.label}" else it.message,
                     )
                 }
                 rescheduleAlerts()
+                services.onTideDataChanged()
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -303,29 +336,16 @@ class TidesViewModel(
         val s = _state.value
         val station = s.station
         val model = s.model
+        alertsPlannedAtSec = Clock.System.now().epochSeconds
         if (!s.settings.alertsEnabled || station == null || model == null) {
+            alertsJob?.cancel()
             services.cancelAlerts()
             return
         }
-        scope.launch {
-            val settings = s.settings
-            val nowSec = Clock.System.now().epochSeconds
-            val lead = settings.alertLeadMinutes * 60L
+        alertsJob?.cancel()
+        alertsJob = scope.launch {
             val alerts = withContext(Dispatchers.Default) {
-                val predictor = TidePredictor(model)
-                TideCalculations.events(model, predictor, nowSec, nowSec + 7 * 86400L)
-                    .filter { (it.type == TideType.HIGH && settings.alertHigh) || (it.type == TideType.LOW && settings.alertLow) }
-                    .filter { it.epochSeconds - lead > nowSec }
-                    .mapIndexed { i, e ->
-                        val kind = if (e.type == TideType.HIGH) "High" else "Low"
-                        val day = formatShortDate(Instant.fromEpochSeconds(e.epochSeconds).toLocalDateTime(timeZone).date)
-                        TideAlert(
-                            id = i,
-                            atEpochMillis = (e.epochSeconds - lead) * 1000,
-                            title = "$kind tide at ${station.name} in ${settings.alertLeadMinutes} min",
-                            body = "$kind water $day ${formatTime(e.epochSeconds, timeZone)}, ${formatHeight(e.height, settings.units)} (predicted). Use as a guide only.",
-                        )
-                    }
+                AlertPlanner.plan(station, model, s.settings, alertsPlannedAtSec, timeZone, services.alertHorizonDays, services.maxAlerts)
             }
             val ok = services.scheduleAlerts(alerts)
             if (!ok) {
@@ -333,5 +353,9 @@ class TidesViewModel(
                 _state.update { it.copy(message = "Notifications are turned off for Tides, so alerts are disabled.") }
             }
         }
+    }
+
+    private companion object {
+        const val ALERT_REFRESH_SECONDS = 6 * 3600L
     }
 }

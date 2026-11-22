@@ -57,35 +57,62 @@ jobs:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build debug APK
-        run: ./gradlew :composeApp:assembleDebug --console=plain
+      - name: Set up release signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          # Version code always increases, so each APK installs over the previous one.
+          echo "TIDES_VERSION_CODE=$((1000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            echo "TIDES_VERSION_NAME=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "TIDES_VERSION_NAME=dev-${GITHUB_RUN_NUMBER}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+            {
+              echo "TIDES_KEYSTORE_FILE=$RUNNER_TEMP/release.jks"
+              echo "TIDES_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD"
+              echo "TIDES_KEY_ALIAS=$KEY_ALIAS"
+              echo "TIDES_KEY_PASSWORD=$KEY_PASSWORD"
+            } >> "$GITHUB_ENV"
+            echo "SIGNED=true" >> "$GITHUB_ENV"
+          else
+            echo "::warning::ANDROID_KEYSTORE_BASE64 is not set: the APK is signed with a throwaway debug key and won't be published."
+            echo "SIGNED=false" >> "$GITHUB_ENV"
+          fi
+      - name: Build release APK
+        run: ./gradlew :composeApp:assembleRelease --console=plain
       - uses: actions/upload-artifact@v4
         with:
-          name: tides-android-debug
-          path: composeApp/build/outputs/apk/debug/*.apk
+          name: tides-android
+          path: composeApp/build/outputs/apk/release/*.apk
       - name: Publish latest-dev pre-release
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && env.SIGNED == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           short_sha="${GITHUB_SHA::7}"
           apk="tides-dev-${short_sha}.apk"
-          cp composeApp/build/outputs/apk/debug/*.apk "$apk"
+          cp composeApp/build/outputs/apk/release/*.apk "$apk"
           # Replace the rolling release so the tag always points at the newest main commit.
           gh release delete latest-dev --cleanup-tag --yes || true
           gh release create latest-dev "$apk" \
             --target "$GITHUB_SHA" \
             --prerelease \
             --title "Latest dev build (${short_sha})" \
-            --notes "Debug APK built automatically from \`main\` at ${GITHUB_SHA}. Not a stable release."
+            --notes "APK built automatically from \`main\` at ${GITHUB_SHA} (version ${TIDES_VERSION_NAME}). Not a stable release."
       - name: Publish tag release
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && env.SIGNED == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="${GITHUB_REF_NAME}"
           apk="tides-${tag}.apk"
-          cp composeApp/build/outputs/apk/debug/*.apk "$apk"
+          cp composeApp/build/outputs/apk/release/*.apk "$apk"
           # Create the release if it doesn't exist yet, then attach (or replace) the APK.
           gh release view "$tag" >/dev/null 2>&1 || \
             gh release create "$tag" --verify-tag --title "$tag" --generate-notes

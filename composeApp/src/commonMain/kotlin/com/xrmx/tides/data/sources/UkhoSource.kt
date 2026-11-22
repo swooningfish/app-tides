@@ -4,11 +4,13 @@ import com.xrmx.tides.data.Net
 import com.xrmx.tides.data.asDouble
 import com.xrmx.tides.data.asString
 import com.xrmx.tides.data.parseUtcEpochSeconds
+import com.xrmx.tides.data.parsing
 import com.xrmx.tides.data.toTitleCaseIfShouting
 import com.xrmx.tides.model.SourceType
 import com.xrmx.tides.model.Station
 import com.xrmx.tides.model.TideEvent
 import com.xrmx.tides.model.TideType
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 
@@ -21,10 +23,14 @@ internal class UkhoSource {
 
     private fun headers(key: String) = mapOf("Ocp-Apim-Subscription-Key" to key)
 
-    suspend fun stations(key: String): List<Station> {
-        val root = Net.getJson("$base/Stations", headers(key)).jsonObject
-        val features = root["features"]?.jsonArray ?: return emptyList()
-        return features.mapNotNull { feature ->
+    suspend fun stations(key: String): List<Station> = parseStations(Net.getJson("$base/Stations", headers(key)))
+
+    suspend fun events(stationRef: String, key: String): List<TideEvent> =
+        parseEvents(Net.getJson("$base/Stations/$stationRef/TidalEvents?duration=7", headers(key)))
+
+    fun parseStations(json: JsonElement): List<Station> = parsing {
+        val features = json.jsonObject["features"]?.jsonArray ?: return@parsing emptyList()
+        features.mapNotNull { feature ->
             val obj = feature.jsonObject
             val props = obj["properties"]?.jsonObject ?: return@mapNotNull null
             val coords = obj["geometry"]?.jsonObject?.get("coordinates")?.jsonArray ?: return@mapNotNull null
@@ -42,9 +48,8 @@ internal class UkhoSource {
         }
     }
 
-    suspend fun events(stationRef: String, key: String): List<TideEvent> {
-        val arr = Net.getJson("$base/Stations/$stationRef/TidalEvents?duration=7", headers(key)).jsonArray
-        return arr.mapNotNull { e ->
+    fun parseEvents(json: JsonElement): List<TideEvent> = parsing {
+        json.jsonArray.mapNotNull { e ->
             val o = e.jsonObject
             val type = when (o["EventType"].asString()) {
                 "HighWater" -> TideType.HIGH

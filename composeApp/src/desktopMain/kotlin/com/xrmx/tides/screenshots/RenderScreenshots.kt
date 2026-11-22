@@ -1,6 +1,8 @@
 package com.xrmx.tides.screenshots
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.ImageComposeScene
 import androidx.compose.ui.graphics.ImageBitmap
@@ -124,7 +126,10 @@ fun main(args: Array<String>) {
 @OptIn(ExperimentalComposeUiApi::class)
 private fun shot(dir: File, name: String, dark: Boolean = false, content: @Composable () -> Unit) {
     val scene = ImageComposeScene(WIDTH, HEIGHT, DENSITY) {
-        TidesTheme(darkTheme = dark) { content() }
+        // Inspection mode makes chart data compute synchronously, so it's ready for the single render.
+        CompositionLocalProvider(LocalInspectionMode provides true) {
+            TidesTheme(darkTheme = dark) { content() }
+        }
     }
     scene.render(0)
     val image = scene.render(1_000_000_000L)

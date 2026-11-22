@@ -16,7 +16,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.ui.platform.LocalFontFamilyResolver
+import androidx.compose.foundation.isSystemInDarkTheme
 import com.xrmx.tides.data.Storage
+import com.xrmx.tides.model.ThemeMode
 import com.xrmx.tides.platform.PlatformBackHandler
 import com.xrmx.tides.platform.PlatformServices
 import com.xrmx.tides.ui.Screen
@@ -43,6 +45,7 @@ fun App(services: PlatformServices) {
         while (true) {
             delay(30_000)
             value = Clock.System.now()
+            viewModel.onTick(value)
         }
     }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -57,7 +60,12 @@ fun App(services: PlatformServices) {
         if (state.showingDisclaimer) viewModel.closeDisclaimer() else viewModel.navigate(Screen.HOME)
     }
 
-    TidesTheme {
+    val dark = when (state.settings.theme) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
+    TidesTheme(darkTheme = dark) {
         Box(Modifier.fillMaxSize()) {
             when {
                 !state.disclaimerAccepted -> DisclaimerScreen(firstRun = true, onAccept = viewModel::acceptDisclaimer)

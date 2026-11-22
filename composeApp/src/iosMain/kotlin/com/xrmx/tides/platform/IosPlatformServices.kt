@@ -111,6 +111,11 @@ class IosPlatformServices : PlatformServices {
         UNUserNotificationCenter.currentNotificationCenter().removeAllPendingNotificationRequests()
     }
 
+    // iOS can't wake the app daily to top alerts up, so schedule as far ahead as its
+    // 64-notification limit allows; the app tops them up whenever it's opened.
+    override val alertHorizonDays: Int get() = 30
+    override val maxAlerts: Int get() = 60
+
     private fun topViewController(): UIViewController? {
         @Suppress("DEPRECATION")
         var vc = UIApplication.sharedApplication.keyWindow?.rootViewController

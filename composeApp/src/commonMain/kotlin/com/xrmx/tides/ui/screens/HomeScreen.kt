@@ -1,5 +1,6 @@
 package com.xrmx.tides.ui.screens
 
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.IosShare
 import androidx.compose.material.icons.outlined.Place
@@ -26,6 +28,8 @@ import androidx.compose.material.icons.outlined.Waves
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +45,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -48,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -61,9 +67,12 @@ import com.xrmx.tides.ui.components.DisclaimerBanner
 import com.xrmx.tides.ui.components.formatShortDate
 import kotlinx.datetime.DateTimeUnit
 import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.atStartOfDayIn
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -119,9 +128,20 @@ fun HomeScreen(
                 EmptyState(actions)
                 return@Column
             }
+            val step = if (state.mode == ViewMode.DAY) 1 else 7
             Column(
                 Modifier
                     .fillMaxSize()
+                    // Swipe left or right to move a day (or week). The chart keeps its own drags for the readout.
+                    .pointerInput(step) {
+                        var total = 0f
+                        val threshold = 72.dp.toPx()
+                        detectHorizontalDragGestures(
+                            onDragStart = { total = 0f },
+                            onDragEnd = { if (abs(total) > threshold) actions.shiftDate(if (total < 0) step else -step) },
+                            onHorizontalDrag = { _, dx -> total += dx },
+                        )
+                    }
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -210,22 +230,57 @@ private fun DateRow(state: UiState, now: Instant, timeZone: TimeZone, actions: T
         ViewMode.DAY -> if (state.selectedDate == today) "Today, ${formatShortDate(state.selectedDate)}" else formatShortDate(state.selectedDate)
         ViewMode.WEEK -> "${formatShortDate(state.selectedDate)} to ${formatShortDate(state.selectedDate.plus(6, DateTimeUnit.DAY))}"
     }
+    var picking by remember { mutableStateOf(false) }
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = { actions.shiftDate(-step) }) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "Previous")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = if (step == 1) "Previous day" else "Previous week")
         }
-        Text(
-            label,
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.weight(1f),
-        )
+        TextButton(onClick = { picking = true }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Outlined.CalendarMonth, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(
+                label,
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         IconButton(onClick = { actions.shiftDate(step) }) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "Next")
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = if (step == 1) "Next day" else "Next week")
         }
         if (state.selectedDate != today) {
             TextButton(onClick = actions::goToToday) { Text("Today") }
         }
+    }
+    if (picking) {
+        DatePickerSheet(
+            initial = state.selectedDate,
+            onDismiss = { picking = false },
+            onPick = { picking = false; actions.goToDate(it) },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DatePickerSheet(initial: LocalDate, onDismiss: () -> Unit, onPick: (LocalDate) -> Unit) {
+    // The Material date picker works in UTC milliseconds at midnight.
+    val pickerState = rememberDatePickerState(initialSelectedDateMillis = initial.atStartOfDayIn(TimeZone.UTC).toEpochMilliseconds())
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val millis = pickerState.selectedDateMillis
+                    if (millis == null) onDismiss()
+                    else onPick(Instant.fromEpochMilliseconds(millis).toLocalDateTime(TimeZone.UTC).date)
+                },
+            ) { Text("Go") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    ) {
+        DatePicker(pickerState)
     }
 }
 

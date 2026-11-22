@@ -33,10 +33,12 @@ Developed by **XRMX Software Solutions**.
 - **Sunrise, sunset and moon phase**, with night shading on the charts and a spring/neap tide hint.
 - **Nearest station by GPS** and searchable station lists.
 - **Favourite stations** for quick switching.
-- **Tide alerts**: a notification 30 minutes, 1 hour or 2 hours before high and/or low water.
+- **Tide alerts**: a notification 30 minutes, 1 hour or 2 hours before high and/or low water, kept up to date in the background.
+- **Home-screen widget** (Android): the level now and the next two tides.
+- **Interactive chart**: touch or drag to read the height at any time; swipe to change day.
 - **Export as PNG and share**: a clean image of the day or week, with the disclaimer included, ready for messages, social media or printing.
 - **Works offline** once a station has synced.
-- **Metres or feet**, plus light and dark themes.
+- **Metres or feet**, an estimated Chart Datum for Environment Agency gauges, and System, Light or Dark themes.
 - Coverage focused on **UK & Ireland**, with **United States** and **worldwide** options.
 
 ## User guide
@@ -106,7 +108,7 @@ The exported image includes the station, the date, the chart, the tide table and
 
 - **Units**: metres or feet.
 - **Region**: which station lists to show.
-- **Tide alerts**: turn on notifications for high and/or low tide at your selected station, and choose how far in advance. Alerts cover the next 7 days and refresh each time you open the app.
+- **Tide alerts**: turn on notifications for high and/or low tide at your selected station, and choose how far in advance. Android keeps alerts topped up in the background; on iPhone they cover the next 30 days, so open the app at least once a month.
 - **API keys**: optional keys for the UK Admiralty and WorldTides (see below).
 - **Disclaimer** and **About**.
 
@@ -179,15 +181,26 @@ Choose your team under *Signing & Capabilities*, then run on a simulator or devi
 ./gradlew :composeApp:run
 ```
 
-`desktopTest` runs the tide engine tests: constituent speeds, extreme detection, harmonic fitting and sun/moon calculations. `run` renders the README screenshots into `docs/screenshots/` from the real Compose screens, using a **demo station with made-up constants**, so the screenshots never show real predictions.
+`desktopTest` runs the unit tests: the tide engine (constituent speeds, extreme detection, harmonic fitting, sun/moon), the API response parsers, storage, alert planning and the estimated Chart Datum. `run` renders the README screenshots into `docs/screenshots/` from the real Compose screens, using a **demo station with made-up constants**, so the screenshots never show real predictions.
 
 ### Continuous integration
 
 `.github/workflows/build.yml` runs on every push and pull request. It:
 
 1. runs the unit tests, renders the screenshots and commits them back to `main` when they change;
-2. builds the Android debug APK (downloadable from the run's artifacts). Pushes to `main` also publish it to the rolling [`latest-dev`](../../releases/tag/latest-dev) pre-release, and pushing any tag (e.g. `v1.1.0`) publishes a GitHub release for that tag with the APK attached;
+2. builds the signed, minified Android release APK (downloadable from the run's artifacts). Pushes to `main` also publish it to the rolling [`latest-dev`](../../releases/tag/latest-dev) pre-release, and pushing any tag (e.g. `v1.1.0`) publishes a GitHub release for that tag with the APK attached. The version code is the CI run number, and tagged builds take their version name from the tag;
 3. builds the iOS app for the simulator on a macOS runner.
+
+#### Android signing
+
+Published APKs must all be signed with the same key, or Android refuses to update one with the next. Create the key once and keep a backup somewhere safe; losing it means users must uninstall to update.
+
+```bash
+keytool -genkeypair -v -keystore tides-release.jks -alias tides -keyalg RSA -keysize 4096 -validity 10000
+base64 -w0 tides-release.jks > tides-release.jks.b64
+```
+
+Then add these repository secrets (*Settings → Secrets and variables → Actions*): `ANDROID_KEYSTORE_BASE64` (the contents of `tides-release.jks.b64`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`tides`) and `ANDROID_KEY_PASSWORD`. Without them CI still builds, but signs with a throwaway debug key and doesn't publish releases.
 
 ## Project structure
 

@@ -5,6 +5,7 @@ import com.xrmx.tides.model.TideEvent
 import com.xrmx.tides.model.TidePoint
 import com.xrmx.tides.model.TideType
 import kotlin.math.cos
+import kotlin.math.floor
 import kotlin.math.sin
 
 /**
@@ -19,13 +20,37 @@ class TidePredictor(model: HarmonicModel) {
         Constituents.named(c.name)?.let { Term(it, c.amplitude, c.phaseDeg) }
     }
 
+    private val omegas = DoubleArray(terms.size) { rad(terms[it].constituent.speed) }
+
+    /**
+     * Nodal factors change over an 18.6-year cycle, so one set per UTC day is plenty and saves
+     * most of the trigonometry. Swapped as a whole, so concurrent readers never see a half-built set.
+     */
+    private class NodalDay(val day: Long, val f: DoubleArray, val u: DoubleArray)
+
+    private var nodalCache: NodalDay? = null
+
+    private fun nodalFor(epochSeconds: Double, astro: Astro): NodalDay {
+        val day = floor(epochSeconds / 86400.0).toLong()
+        nodalCache?.let { if (it.day == day) return it }
+        val f = DoubleArray(terms.size)
+        val u = DoubleArray(terms.size)
+        terms.forEachIndexed { i, t ->
+            val nodal = t.constituent.nodal(astro.n)
+            f[i] = nodal.f
+            u[i] = nodal.u
+        }
+        return NodalDay(day, f, u).also { nodalCache = it }
+    }
+
     /** Height in metres above the model datum. */
     fun height(epochSeconds: Double): Double {
         val astro = Astro(epochSeconds)
+        val nodal = nodalFor(epochSeconds, astro)
         var h = z0
-        for (t in terms) {
-            val nodal = t.constituent.nodal(astro.n)
-            h += nodal.f * t.amplitude * cos(rad(t.constituent.equilibriumArgument(astro) + nodal.u - t.phaseDeg))
+        for (i in terms.indices) {
+            val t = terms[i]
+            h += nodal.f[i] * t.amplitude * cos(rad(t.constituent.equilibriumArgument(astro) + nodal.u[i] - t.phaseDeg))
         }
         return h
     }
@@ -33,13 +58,33 @@ class TidePredictor(model: HarmonicModel) {
     /** Rate of change in metres per hour; positive while the tide is rising. */
     fun rate(epochSeconds: Double): Double {
         val astro = Astro(epochSeconds)
+        val nodal = nodalFor(epochSeconds, astro)
         var r = 0.0
-        for (t in terms) {
-            val nodal = t.constituent.nodal(astro.n)
-            val omega = rad(t.constituent.speed)
-            r -= nodal.f * t.amplitude * omega * sin(rad(t.constituent.equilibriumArgument(astro) + nodal.u - t.phaseDeg))
+        for (i in terms.indices) {
+            val t = terms[i]
+            r -= nodal.f[i] * t.amplitude * omegas[i] * sin(rad(t.constituent.equilibriumArgument(astro) + nodal.u[i] - t.phaseDeg))
         }
         return r
+    }
+
+    /** Lowest level over [days] from [fromEpoch]: an estimate of Lowest Astronomical Tide (Chart Datum). */
+    fun lowestLevel(fromEpoch: Long, days: Int = 366): Double {
+        var minT = fromEpoch
+        var minH = Double.MAX_VALUE
+        val end = fromEpoch + days * 86400L
+        var t = fromEpoch
+        while (t < end) {
+            val h = height(t.toDouble())
+            if (h < minH) { minH = h; minT = t }
+            t += 900
+        }
+        // Refine around the coarse minimum to the minute.
+        var r = minT - 900
+        while (r <= minT + 900) {
+            minH = minOf(minH, height(r.toDouble()))
+            r += 60
+        }
+        return minH
     }
 
     fun series(fromEpoch: Long, toEpoch: Long, stepSeconds: Long): List<TidePoint> {

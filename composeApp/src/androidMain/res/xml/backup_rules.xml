@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and older: keep API keys and scheduled alarms out of backups. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="tides_secrets.xml" />
+    <exclude domain="sharedpref" path="tide_alerts.xml" />
+</full-backup-content>

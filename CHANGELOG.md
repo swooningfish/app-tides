@@ -7,15 +7,32 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ## [Unreleased]
 
 ### Fixed
+- Tide alerts no longer stop after a week if the app isn't opened. Android tops them up daily in the background and reschedules them after a reboot, an app update or a time zone change. iOS schedules up to 30 days ahead.
+- "Today" now moves on at midnight if the app is left open or resumed the next day.
+- Saving a UK Admiralty or WorldTides key now loads a station that had failed for want of one.
+- Network failures show plain-English messages ("No internet connection…") instead of raw exception text.
+- Android: published APKs are signed with a stable release key and have an increasing version code, so each one installs over the last without losing favourites or keys.
 - iOS: Kotlin/Native compile errors in the share sheet (iPad popover anchor) and save-to-Photos code.
 - iOS CI build: XcodeGen now generates a shared `iosApp` scheme with an Xcode 14-compatible project format, the job runs on `macos-15`, and build errors are surfaced as workflow annotations.
 
 ### Added
+- Touch or drag the chart to read the predicted height at any time.
+- Swipe left or right to move between days or weeks, and tap the date to pick any date.
+- Android home-screen widget showing the level now and the next two tides.
+- Environment Agency heights can be shown above an estimated Chart Datum (the lowest predicted tide over a year), so they're comparable with tide tables. On by default; switch it in Settings or from the "About this prediction" card.
+- Theme setting: System, Light or Dark.
+- Week view highlights today and shows each day's tidal range.
+- Screen readers get a text summary of each chart.
+- Unit tests for the API response parsers, storage, alert planning, Chart Datum estimate and midnight rollover.
 - This changelog, linked from the README.
 
 - CI publishes the Android APK to a rolling `latest-dev` pre-release on every push to `main`, and creates a GitHub release with the APK for every pushed tag.
 
 ### Changed
+- API keys are stored separately from other settings: excluded from Android backups and kept in the iOS Keychain. Existing keys are moved automatically.
+- Station lists and calibrated models are stored as files instead of in preferences, and models for stations not used recently are removed.
+- Day and week calculations run off the main thread, and nodal corrections are computed once per day rather than per point.
+- Android release builds are minified with R8.
 - CI uses `actions/checkout@v5` and `actions/setup-java@v5`.
 
 ## [1.0.0] - 2026-10-26

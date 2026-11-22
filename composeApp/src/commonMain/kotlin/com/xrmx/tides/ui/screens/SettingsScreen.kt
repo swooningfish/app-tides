@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.xrmx.tides.AppInfo
 import com.xrmx.tides.model.Region
+import com.xrmx.tides.model.ThemeMode
 import com.xrmx.tides.model.Units
 import com.xrmx.tides.ui.Screen
 import com.xrmx.tides.ui.TidesActions
@@ -78,6 +79,30 @@ fun SettingsScreen(state: UiState, actions: TidesActions) {
                 }
             }
 
+            SectionCard("Appearance") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ThemeMode.entries.forEach { mode ->
+                        FilterChip(settings.theme == mode, { actions.updateSettings { it.copy(theme = mode) } }, { Text(mode.label) })
+                    }
+                }
+            }
+
+            SectionCard("Heights") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Show Environment Agency heights above an estimated Chart Datum",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Switch(settings.estimatedChartDatum, { on -> actions.updateSettings { it.copy(estimatedChartDatum = on) } })
+                }
+                Hint(
+                    "Environment Agency gauges measure against Ordnance Datum Newlyn (roughly mean sea level), so low water is often " +
+                        "below zero. With this on, zero is the lowest predicted tide, close to the Chart Datum used in tide tables. " +
+                        "UK Admiralty stations already use Chart Datum."
+                )
+            }
+
             SectionCard("Region") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Region.entries.forEach { r ->
@@ -102,7 +127,7 @@ fun SettingsScreen(state: UiState, actions: TidesActions) {
                             FilterChip(settings.alertLeadMinutes == minutes, { actions.updateSettings { it.copy(alertLeadMinutes = minutes) } }, { Text(label) })
                         }
                     }
-                    Hint("Alerts are scheduled for the next 7 days and refreshed each time you open the app. They are predictions too, so use them only as a guide.")
+                    Hint("Alerts are scheduled ahead and topped up automatically. On iPhone, open the app at least once a month to keep them going. They are predictions too, so use them only as a guide.")
                 }
             }
 

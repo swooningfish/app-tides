@@ -20,6 +20,13 @@ interface PlatformServices {
     suspend fun scheduleAlerts(alerts: List<TideAlert>): Boolean
 
     fun cancelAlerts()
+
+    /** How far ahead to schedule alerts, and the most to schedule at once. */
+    val alertHorizonDays: Int get() = 7
+    val maxAlerts: Int get() = 40
+
+    /** Called when the selected station, its model or display settings change (e.g. to refresh widgets). */
+    fun onTideDataChanged() {}
 }
 
 expect fun ImageBitmap.encodePng(): ByteArray
