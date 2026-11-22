@@ -186,7 +186,7 @@ Choose your team under *Signing & Capabilities*, then run on a simulator or devi
 `.github/workflows/build.yml` runs on every push and pull request. It:
 
 1. runs the unit tests, renders the screenshots and commits them back to `main` when they change;
-2. builds the Android debug APK (downloadable from the run's artifacts);
+2. builds the Android debug APK (downloadable from the run's artifacts). Pushes to `main` also publish it to the rolling [`latest-dev`](../../releases/tag/latest-dev) pre-release, and pushing any tag (e.g. `v1.1.0`) publishes a GitHub release for that tag with the APK attached;
 3. builds the iOS app for the simulator on a macOS runner.
 
 ## Project structure

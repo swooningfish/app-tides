@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Added
 - This changelog, linked from the README.
 
+- CI publishes the Android APK to a rolling `latest-dev` pre-release on every push to `main`, and creates a GitHub release with the APK for every pushed tag.
+
 ### Changed
 - CI uses `actions/checkout@v5` and `actions/setup-java@v5`.
 
