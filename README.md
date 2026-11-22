@@ -200,7 +200,7 @@ keytool -genkeypair -v -keystore tides-release.jks -alias tides -keyalg RSA -key
 base64 -w0 tides-release.jks > tides-release.jks.b64
 ```
 
-Then add these repository secrets (*Settings → Secrets and variables → Actions*): `ANDROID_KEYSTORE_BASE64` (the contents of `tides-release.jks.b64`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`tides`) and `ANDROID_KEY_PASSWORD`. Without them CI still builds, but signs with a throwaway debug key and doesn't publish releases.
+Then add these repository secrets (*Settings → Secrets and variables → Actions*): `ANDROID_KEYSTORE_BASE64` (the contents of `tides-release.jks.b64`), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` (`tides`) and `ANDROID_KEY_PASSWORD`. Without them CI still builds and publishes, but signs with a throwaway debug key, so each APK must be uninstalled before the next is installed.
 
 ## Project structure
 
